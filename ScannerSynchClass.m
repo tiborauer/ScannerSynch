@@ -381,7 +381,7 @@ classdef ScannerSynchClass < handle
             obj.BBoxWaitForRealease = true;            
             obj.SetButtonBoxReadoutTime(0);
             
-            WaitForButtonPress(obj,varargin);
+            WaitForButtonPress(obj,varargin{:});
             
             % restore settings
             obj.BBoxWaitForRealease = false;
