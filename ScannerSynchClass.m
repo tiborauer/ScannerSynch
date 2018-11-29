@@ -232,7 +232,7 @@ classdef ScannerSynchClass < handle
                 obj.EmulSynch = true;
                 obj.EmulButtons = true;
                 
-                obj.DAQ.Channels = 1:(1 + numel(obj.buttList_LT) + numel(obj.buttList_LT));
+                obj.DAQ.Channels = 1:(1 + numel(obj.buttList_LT) + numel(obj.buttList_NATA));
                 fprintf('\n');
                 fprintf('WARNING: DAQ card is not in use!\n');
             end
