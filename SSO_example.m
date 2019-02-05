@@ -1,5 +1,5 @@
 %% Initialise
-SSO = ScannerSynchClass;
+SSO = ScannerSynchClass(1,1);
 % SSO = ScannerSynchClass(1);   % emulate scanner synch pulse
 % SSO = ScannerSynchClass(0,1); % emulate button box
 % SSO = ScannerSynchClass(1,1); % emulate scanner synch pulse and button box
@@ -32,15 +32,15 @@ while SSO.SynchCount < 10      % until 10 pulses
 end
 
 %% Example for buttons:
-SSO.SetButtonReadoutTime(0.5);      % block individual buttons
+SSO.SetButtonReadoutTime(0.25);      % block individual buttons
 % SSO.SetButtonBoxReadoutTime(0.5); % block the whole buttonbox
-% SSO.Keys = {'f1','f2','f3','f4'}; % emulation Buttons #1-#4 with F1-F4
+SSO.Keys = {'f1','f2','f3','f4'}; % emulation Buttons #1-#4 with F1-F4
 n = 0;
 % SSO.BBoxTimeout = 1.5;            % Wait for button press for 1.5s
 % SSO.BBoxTimeout = -1.5;           % Wait for button press for 1.5s even in case of response
 SSO.ResetClock;
 while n ~= 10                       % polls 10 button presses
-    fprintf('Press a button!\n');
+    fprintf('\nPress a button!\n');
 %     SSO.WaitForButtonPress;         % Wait for any button to be pressed
 %     SSO.WaitForButtonRelease;       % Wait for any button to be released
 %     SSO.WaitForButtonPress([],5); % Wait for Button #5
@@ -48,6 +48,7 @@ while n ~= 10                       % polls 10 button presses
 %     SSO.WaitForButtonPress(-2);   % Wait for any (number of) button(s) for 2s even in case of response (overrides SSO.BBoxTimeout only for this event)
 %     SSO.WaitForButtonPress(2,5);  % Wait for Button #5 for 2s (overrides SSO.BBoxTimeout only for this event)
 %     SSO.WaitForButtonPress(-2,5); % Wait for (any number of presses of) Button #5 for 2s even in case of response (overrides SSO.BBoxTimeout only for this event)
+    SSO.WaitForButtonPress(-2,[1,3]);
     n = n + 1;
     for b = 1:numel(SSO.ButtonPresses)
         fprintf('#%d Button %d ',b,SSO.ButtonPresses(b));

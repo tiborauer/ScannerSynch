@@ -358,13 +358,16 @@ classdef ScannerSynchClass < handle
             if (nargin < 2 || isempty(timeout)), timeout = obj.BBoxTimeout; end
             wait = timeout < 0; % wait until timeout even in case of response
             timeout = abs(timeout);
-                       
+            
             while (~obj.Buttons ||... % button pressed
                     wait || ...
-                    (nargin >= 3 && ~isempty(ind) && ~any(obj.LastButtonPress == ind))) && ... % correct button pressed
+                    (nargin >= 3 && ~isempty(ind) && ~any(arrayfun(@(x) any(x == ind), obj.LastButtonPress)))) && ... % correct button pressed
                     (obj.Clock - BBoxQuery) < timeout % timeout
                 if ~isempty(obj.LastButtonPress)
-                    if nargin >= 3 && ~isempty(ind) && ~any(obj.LastButtonPress == ind), continue; end % incorrect button
+                    if nargin >= 3 && ~isempty(ind) && ~any(arrayfun(@(x) any(x == ind), obj.LastButtonPress))  % incorrect button
+                        obj.LastButtonPress = [];
+                        continue;
+                    end
                     if ~isempty(obj.TimeOfButtonPresses) && (obj.TimeOfButtonPresses(end) == obj.TimeOfLastButtonPress), continue; end % same event
                     obj.ButtonPresses = horzcat(obj.ButtonPresses,obj.LastButtonPress); 
                     obj.TimeOfButtonPresses = horzcat(obj.TimeOfButtonPresses,ones(1,numel(obj.LastButtonPress))*obj.TimeOfLastButtonPress);
