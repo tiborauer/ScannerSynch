@@ -186,7 +186,7 @@ classdef TCPClass < handle
         end
         
         function Log(obj,msg)
-            if ~obj.Quiet || contains(msg,'ERROR') || contains(msg,'WARNING')
+            if ~obj.Quiet || contains(msg,'ERROR') || contains(msg,'WARNING') || contains(msg,'USER')
                 if ~isempty(obj.iClock)
                     fprintf('[%2.3f] %s\n', obj.Clock, msg);
                 else
