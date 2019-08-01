@@ -11,9 +11,12 @@
 %                   LastName            Last name of the subject as specified during "Patient Registration"
 %                   ID                  Patient ID of the subject as specified during "Patient Registration"
 %               Optional field
-%                   watch_portcommand   System command to open watchport
+%                   watchport_command   System command to open watchport
+%                   FirstFileName       First DICOM file to read
 %               
-%       [hdr, img] = ReceiveScan        Read image and convert for analysis
+%       ReceiveInitial                  Reads initial header explicitely
+%
+%       [hdr, img] = ReceiveScan        Reads image and convert for analysis
 %           hdr                         Header structure. 
 %               Full DICOM header (only in case, when DICOM file as header source has been used.
 %               AcquisitionMatrix       In-plane resolution
@@ -36,7 +39,7 @@
 %       [hdr, img] = ReceiveImageData
 %   Util function (not part of the class)
 %       val = getHeaderDataFromDump(dump,field,[multiple])  Retrieve information from header obtained via DICOM Direct RTExport
-%       hdr = parseHeader(inf)                              Construct header based on DICOM header
+%       hdr = convertHeader(inf)                            Convert DICOM header to 'minimal' NIfTI header
 %       ind = cell_index(dump,field)                        Give index of a string stored in a cell array
 %
 % ACKNOWLEDGEMENT
@@ -68,6 +71,7 @@ classdef ImageTCPClass < TCPClass
         DICOMWatchDir
         DICOMLastName
         DICOMID
+        DICOMFirstFileName
     end
     properties (Access=private, Dependent=true)
         HeaderComplete
@@ -80,9 +84,19 @@ classdef ImageTCPClass < TCPClass
         
         function setHeaderFromDICOM(obj,data)
             obj.DICOMWatchDir = data.watch;
-            if ~isempty(data.watch_portcommand), system(data.watch_portcommand); end
+            if isfield(data,'watchport_command') && ~isempty(data.watchport_command), system(data.watchport_command); end
             obj.DICOMLastName = data.LastName;
-            obj.DICOMID = data.ID;            
+            obj.DICOMID = data.ID;
+            if isfield(data,'FirstFileName') && ~isempty(data.FirstFileName), obj.DICOMFirstFileName = data.FirstFileName; end
+        end
+        
+        function ReceiveInitial(obj)
+            dump = '';
+            while isempty(dump) && obj.Open
+                dump = obj.ReceiveImageData;
+            end
+            
+            if isempty(obj.DICOMWatchDir), obj.parseIntroHeader; end
         end
         
         function [hdr, img] = ReceiveScan(obj)
@@ -93,20 +107,25 @@ classdef ImageTCPClass < TCPClass
             end
             
             % Parse header
-            if isempty(fieldnames(obj.Header))
+            if ~obj.HeaderComplete
                 % Read header from file
                 if ~isempty(obj.DICOMWatchDir)
                     DIR = fullfile(obj.DICOMWatchDir,sprintf('%s.%s.%s',datestr(date,'yyyymmdd'),obj.DICOMLastName,obj.DICOMID));
-                    while true
-                        d = dir(fullfile(DIR,sprintf('*_*_%06d.dcm',1)));
-                        if ~isempty(d)
-                            dat = sscanf(d(1).name,'%03d_%06d_000001.dcm');
-                            subject = dat(1);
-                            session = dat(2);
-                            break
+                    if ~isempty(obj.DICOMFirstFileName)
+                        img_file = fullfile(DIR,obj.DICOMFirstFileName);
+                        while isempty(dir(img_file)), end
+                    else
+                        while true
+                            d = dir(fullfile(DIR,sprintf('*_*_%06d.dcm',1)));
+                            if ~isempty(d)
+                                dat = sscanf(d(1).name,'%03d_%06d_000001.dcm');
+                                subject = dat(1);
+                                session = dat(2);
+                                break
+                            end
                         end
+                        img_file = fullfile(DIR,sprintf('%03d_%06d_%06d.dcm',subject,session,1));
                     end
-                    img_file = fullfile(DIR,sprintf('%03d_%06d_%06d.dcm',subject,session,1));
                     d = dir(img_file);
                     while d.bytes < (180*1024) % 180kB header
                         d = dir(img_file);
@@ -119,58 +138,20 @@ classdef ImageTCPClass < TCPClass
                     obj.Header.NumberOfImagesInMosaic = str2double(CSA(cell_index({CSA.name},'NumberOfImagesInMosaic')).item(1).val);
                     obj.Header.SliceNormalVector = str2num([CSA(cell_index({CSA.name},'SliceNormalVector')).item.val]);
                     obj.Header.SliceTimes = str2num([CSA(cell_index({CSA.name},'MosaicRefAcqTimes')).item.val]);
-                    
-                    %pBWpe = str2num([CSA(cell_index({CSA.name},'BandwidthPerPixelPhaseEncode')).item.val]);
-                    %echospacing = 1/(pBWpe * obj.Header.NumberOfPhaseEncodingSteps); % in s
-                    
+% TODO                    echospacing = 1/(str2num([CSA(cell_index({CSA.name},'BandwidthPerPixelPhaseEncode')).item.val]) * obj.Header.NumberOfPhaseEncodingSteps); % in s
                 else
                     % Read header from Direct
-                    if isempty(fieldnames(obj.Header)) % intro header
-                        t = [...
-                            getHeaderDataFromDump(dump,'ParamLong."NImageLins"'); ...
-                            getHeaderDataFromDump(dump,'ParamLong."NImageCols"') ...
-                            ];
-                        if ~any(isnan(t)), obj.Header.AcquisitionMatrix = t; end
-                        t = [...
-                            getHeaderDataFromDump(dump,'ParamDouble."RoFOV"');...
-                            getHeaderDataFromDump(dump,'ParamDouble."PeFOV"') ...
-                            ];
-                        if ~any(isnan(t)), obj.Header.PixelSpacing= t./obj.Header.AcquisitionMatrix; end % 2x1 [3; 3]
-                    end
-                    
-                    if numel(fieldnames(obj.Header)) == 2 % normal header
-                        t = getHeaderDataFromDump(dump,'DICOM.ImagesInMosaic');
-                        if ~any(isnan(t)), obj.Header.NumberOfImagesInMosaic = round(t); end
-                        t = getHeaderDataFromDump(dump,'DICOM.SpacingBetweenSlices');
-                        if ~any(isnan(t)), obj.Header.SpacingBetweenSlices = getHeaderDataFromDump(dump,'DICOM.SpacingBetweenSlices'); end
-% TODO                        obj.Header.ImagePositionPatient = []; % 3x1
-                        t = [...
-                            getHeaderDataFromDump(dump,'RowVec.dSag'); ...
-                            getHeaderDataFromDump(dump,'RowVec.dCor'); ...
-                            getHeaderDataFromDump(dump,'RowVec.dTra'); ...
-                            getHeaderDataFromDump(dump,'ColumnVec.dSag'); ...
-                            getHeaderDataFromDump(dump,'ColumnVec.dCor'); ...
-                            getHeaderDataFromDump(dump,'ColumnVec.dTra') ...
-                            ];
-                        if ~any(isnan(t)), obj.Header.ImageOrientationPatien = t; end
-                        t = getHeaderDataFromDump(dump,'DICOM.NoOfCols');
-                        if ~any(isnan(t)), obj.Header.Columns = round(t); end
-                        t = getHeaderDataFromDump(dump,'DICOM.NoOfRows');
-                        if ~any(isnan(t)), obj.Header.Rows = round(t); end
-                        t = getHeaderDataFromDump(dump,'DICOM.SlcNormVector',true);
-                        if ~any(isnan(t)), obj.Header.SliceNormalVector = t; end
-                        t = getHeaderDataFromDump(dump,'DICOM.MosaicRefAcqTimes',true);
-                        if ~any(isnan(t)), obj.Header.SliceTimes = t; end 
-                    end
+                    if isempty(fieldnames(obj.Header)), obj.parseIntroHeader; end
+                    if numel(fieldnames(obj.Header)) == 2, obj.parseHeader; end
                 end
-                if obj.HeaderComplete, obj.Header = parseHeader(obj.Header); end
+                if obj.HeaderComplete, obj.Header = convertHeader(obj.Header); end
             end
             
             % Header
             hdr = obj.Header;
             
             % Image
-            if ~isempty(mosaic)
+            if ~isempty(mosaic) && obj.HeaderComplete
                 mosaic = reshape(mosaic,[hdr.Columns hdr.Rows])';
                 nm = ceil(sqrt(hdr.Dimensions(3)));
                 for s = 1:hdr.Dimensions(3)
@@ -183,7 +164,18 @@ classdef ImageTCPClass < TCPClass
         end
         
         function val = get.HeaderComplete(obj)
-            val = numel(fieldnames(obj.Header)) >= 9;
+            reqFields = {...
+                'AcquisitionMatrix'...
+                'NumberOfImagesInMosaic'...
+                'PixelSpacing'...
+                'SpacingBetweenSlices'...
+                'ImagePositionPatient'...
+                'ImageOrientationPatient'...
+                'Columns'...
+                'Rows'...
+                'SliceNormalVector'...
+                };
+            val = numel(intersect(fieldnames(obj.Header),reqFields)) == numel(reqFields);
         end
     end
     
@@ -214,6 +206,45 @@ classdef ImageTCPClass < TCPClass
             %hdr = t{1};
             img = obj.ReceiveData(sImg/2,'uint16','intel');
         end
+        
+        function parseIntroHeader(obj,dump)
+            t = [...
+                getHeaderDataFromDump(dump,'ParamLong."NImageLins"'); ...
+                getHeaderDataFromDump(dump,'ParamLong."NImageCols"') ...
+                ];
+            if ~any(isnan(t)), obj.Header.AcquisitionMatrix = t; end
+            t = [...
+                getHeaderDataFromDump(dump,'ParamDouble."RoFOV"');...
+                getHeaderDataFromDump(dump,'ParamDouble."PeFOV"') ...
+                ];
+            if ~any(isnan(t)), obj.Header.PixelSpacing= t./obj.Header.AcquisitionMatrix; end % 2x1 [3; 3]
+        end
+        
+        function parseHeader(obj,dump)
+            t = getHeaderDataFromDump(dump,'DICOM.ImagesInMosaic');
+            if ~any(isnan(t)), obj.Header.NumberOfImagesInMosaic = round(t); end
+            t = getHeaderDataFromDump(dump,'DICOM.SpacingBetweenSlices');
+            if ~any(isnan(t)), obj.Header.SpacingBetweenSlices = getHeaderDataFromDump(dump,'DICOM.SpacingBetweenSlices'); end
+% TODO                obj.Header.ImagePositionPatient = []; % 3x1
+            t = [...
+                getHeaderDataFromDump(dump,'RowVec.dSag'); ...
+                getHeaderDataFromDump(dump,'RowVec.dCor'); ...
+                getHeaderDataFromDump(dump,'RowVec.dTra'); ...
+                getHeaderDataFromDump(dump,'ColumnVec.dSag'); ...
+                getHeaderDataFromDump(dump,'ColumnVec.dCor'); ...
+                getHeaderDataFromDump(dump,'ColumnVec.dTra') ...
+                ];
+            if ~any(isnan(t)), obj.Header.ImageOrientationPatien = t; end
+            t = getHeaderDataFromDump(dump,'DICOM.NoOfCols');
+            if ~any(isnan(t)), obj.Header.Columns = round(t); end
+            t = getHeaderDataFromDump(dump,'DICOM.NoOfRows');
+            if ~any(isnan(t)), obj.Header.Rows = round(t); end
+            t = getHeaderDataFromDump(dump,'DICOM.SlcNormVector',true);
+            if ~any(isnan(t)), obj.Header.SliceNormalVector = t; end
+            t = getHeaderDataFromDump(dump,'DICOM.MosaicRefAcqTimes',true);
+            if ~any(isnan(t)), obj.Header.SliceTimes = t; end
+        end        
+        
     end
 end
 
@@ -221,6 +252,10 @@ end
 
 function val = getHeaderDataFromDump(dump,field,multiple)
 ind = cell_index(dump,field);
+if isempty(ind)
+    val(1) = NaN;
+    return;
+end
 if nargin < 3 || ~multiple, ind = ind(1); end
 
 field0 = field;
@@ -235,7 +270,7 @@ for l = 1:numel(ind)
 end
 end
 
-function hdr = parseHeader(inf)
+function hdr = convertHeader(inf)
 %   Based on spm_dicom_convert Id 6190 2014-09-23 16:10:50Z guillaume $
 %       by John Ashburner & Jesper Andersson
 %       Part of SPM by Wellcome Trust Centre for Neuroimaging
@@ -271,8 +306,5 @@ hdr.mat = mat;
 end
 
 function ind = cell_index(dump,field)
-ind = [];
-for l = 1:numel(dump)
-    if strfind(dump{l},field), ind(end+1) = l; end
-end
+ind = find(cellfun(@(x) strcmpi(x,field), dump));
 end

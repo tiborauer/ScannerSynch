@@ -1,20 +1,19 @@
 %%
-dbstop if error
-initialHeader = 0;
+port = 5677;
+nScan = 20;
 
-tcp = ImageTCPClass(5677);
-
-data.watch = 'D:\Temp\NFT\RT';
-data.watch_portcommand = '';
-data.LastName = '19910811IOSA';
-data.ID = 'RH';
+tcp = ImageTCPClass(port);
+data.watch = 'C:\RT\rt';
+data.LastName = 'Test';
+data.ID = 'RHUL';
+data.FirstFileName = '001_000003_000001.dcm';
 tcp.setHeaderFromDICOM(data);
-
 tcp.WaitForConnection;
 % tcp.Quiet = true;
-for n = 1-initialHeader:101
+
+for n = 1:nScan
     fprintf('Scan #%03d\n',n);
-    [hdr{n+initialHeader}, img{n+initialHeader}] = tcp.ReceiveScan;
+    [hdr{n}, img{n}] = tcp.ReceiveScan;
 
     if n == 1
         t = tic;
@@ -25,8 +24,8 @@ for n = 1-initialHeader:101
     
     if ~tcp.Open, break; end
 end
+
 tcp.Close;
 
 %%
 save run e hdr img
-clear classes
