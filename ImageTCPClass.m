@@ -4,14 +4,14 @@
 % DESCRIPTION
 %   Methods
 %       obj = ImageTCPClass(port, [switches])   Constructor. See obj = TCPClass(port, [switches]) for reference
-%       setHeaderFromDICOM(data)        Header read from DICOM file received via the standard RTExport, when DICOM files appear in <watch>/<date>.<LastName>.<ID>
+%       setHeaderFromDICOM(data)        Header read from DICOM file received via the standard RTExport, when DICOM files appear in <watch> or <watch>/<date>.<LastName>.<ID>
 %           data (structure)            Initialisation information
 %               Obligatory fields
 %                   watch               Main directory for incoming DICOM files
-%                   LastName            Last name of the subject as specified during "Patient Registration"
-%                   ID                  Patient ID of the subject as specified during "Patient Registration"
 %               Optional field
 %                   watchport_command   System command to open watchport
+%                   LastName            Last name of the subject as specified during "Patient Registration" (in case <watch> is the common real-time folder)
+%                   ID                  Patient ID of the subject as specified during "Patient Registration" (in case <watch> is the common real-time folder)
 %                   FirstFileName       First DICOM file to read
 %               
 %       ReceiveInitial                  Reads initial header explicitely
@@ -85,8 +85,8 @@ classdef ImageTCPClass < TCPClass
         function setHeaderFromDICOM(obj,data)
             obj.DICOMWatchDir = data.watch;
             if isfield(data,'watchport_command') && ~isempty(data.watchport_command), system(data.watchport_command); end
-            obj.DICOMLastName = data.LastName;
-            obj.DICOMID = data.ID;
+            if isfield(data,'LastName') && ~isempty(data.LastName), obj.DICOMLastName = data.LastName; end
+            if isfield(data,'ID') && ~isempty(data.ID), obj.DICOMID = data.ID; end
             if isfield(data,'FirstFileName') && ~isempty(data.FirstFileName), obj.DICOMFirstFileName = data.FirstFileName; end
         end
         
@@ -110,7 +110,8 @@ classdef ImageTCPClass < TCPClass
             if ~obj.HeaderComplete
                 % Read header from file
                 if ~isempty(obj.DICOMWatchDir)
-                    DIR = fullfile(obj.DICOMWatchDir,sprintf('%s.%s.%s',datestr(date,'yyyymmdd'),obj.DICOMLastName,obj.DICOMID));
+                    DIR = obj.DICOMWatchDir;
+                    if ~isempty(obj.DICOMLastName) && ~isempty(obj.DICOMID), DIR = fullfile(DIR,sprintf('%s.%s.%s',datestr(date,'yyyymmdd'),obj.DICOMLastName,obj.DICOMID)); end
                     if ~isempty(obj.DICOMFirstFileName)
                         img_file = fullfile(DIR,obj.DICOMFirstFileName);
                         while isempty(dir(img_file)), end
