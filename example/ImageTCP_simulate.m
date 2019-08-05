@@ -1,26 +1,27 @@
-DIR = 'D:\Temp\NFT\RT\20190729.19910811IOSA.RH';
-fnList = cellstr(spm_select('FPList',DIR,'001_000006_.*'))';
-
-d = dir(fnList{1}); 
-fileSize = d.bytes;
+DIR = 'C:\_RT\rtData\NF_PSC\NF_Run_1';
+fnList = cellstr(spm_select('FPList',DIR,'001_000007_.*'))';
+da = cellfun(@(x) dir(x), fnList);
+fsList = [da.bytes];
 imgSize = numel(dicomread(fnList{1}))*2;
-hdrSize = fileSize-imgSize;
 
 %%
 tcp = TCPClass(5677);
 tcp.Connect('localhost');
 
-for fn = fnList
-    fid = fopen(fn{1});
+%%
+for fn = 1:numel(fnList)
+    fid = fopen(fnList{fn});
     dat = uint8(fread(fid));
     fclose(fid);
+    hdrSize = fsList(fn) - imgSize;
     tcp.SendData(uint32(hdrSize),'intel');
     tcp.SendData(uint32(imgSize),'intel');
     tcp.SendData(dat(1:hdrSize));
-    tcp.SendData(dat(hdrSize+1:hdrSize+imgSize));
+    tcp.SendData(dat(hdrSize+1:end));
 end
 
-tcp.Close
+%%
+tcp.CloseConnection
 
 %%
 clear classes
