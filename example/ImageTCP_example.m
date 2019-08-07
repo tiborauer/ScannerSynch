@@ -1,17 +1,19 @@
-%%
+%% Configuration
 port = 5677;
-nScan = 20;
+DIR = 'C:\_RT\rtData\NF_PSC\NF_Run_1';
+fnList = cellstr(spm_select('FPList',DIR,'001_000007_.*'))';
+[~,f,e] = fileparts(fnList{1}); firstFn = strcat(f,e);
 
+%% TCP init
 tcp = ImageTCPClass(port);
-data.watch = 'C:\RT\rt';
-data.LastName = 'Test';
-data.ID = 'RHUL';
-data.FirstFileName = '001_000003_000001.dcm';
+data.watch = DIR;
+data.FirstFileName = firstFn;
 tcp.setHeaderFromDICOM(data);
 tcp.WaitForConnection;
 % tcp.Quiet = true;
 
-for n = 1:nScan
+%% Run
+for n = 1:numel(fnList)
     fprintf('Scan #%03d\n',n);
     [hdr{n}, img{n}] = tcp.ReceiveScan;
 
@@ -25,7 +27,7 @@ for n = 1:nScan
     if ~tcp.Open, break; end
 end
 
-tcp.Close;
-
-%%
+%% Save and cleanup
+tcp.CloseConnection;
 save run e hdr img
+clear classes
