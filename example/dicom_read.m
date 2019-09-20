@@ -22,7 +22,7 @@ function hdr = dicom_hdr(img_file)
 hdr = spm_dicom_headers(img_file); hdr = hdr{1};
 CSA = hdr.CSAImageHeaderInfo;
 
-mat = sscanf(CSA(cellfun(@(x) contains(x,'AcquisitionMatrixText'), {CSA.name})).item(1).val,'%d*%d');
+mat = cellfun(@(x) str2double(x),regexp(CSA(cellfun(@(x) contains(x,'AcquisitionMatrixText'), {CSA.name})).item(1).val,'[0-9]*[0-9]*','match'));
 nSl = str2double(CSA(cellfun(@(x) contains(x,'NumberOfImagesInMosaic'), {CSA.name})).item(1).val);
 
 hdr.Dimensions = [mat' nSl];
