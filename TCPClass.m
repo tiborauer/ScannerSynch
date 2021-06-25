@@ -81,6 +81,8 @@ classdef TCPClass < handle
                 if any(strcmp(varargin,'quiet')), obj.Quiet = true; end
             end
             
+            addpath(fullfile(fileparts(which('TCPClass')),'tcp_udp_ip'));
+
             obj.Socket = pnet('tcpsocket',port);
             if obj.Socket == -1
                 obj.Log(sprintf('ERROR: Specified TCP port %d cannot be opened!',port));
@@ -92,6 +94,7 @@ classdef TCPClass < handle
         end
         
         function delete(obj)
+            rmpath(fullfile(fileparts(which('TCPClass')),'tcp_udp_ip'));
             obj.Close;
         end
         
