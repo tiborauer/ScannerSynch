@@ -19,8 +19,8 @@
 % 	SynchCount					= number of scanner synch pulses
 %   MissedSynch                 = number of missed scanner synch pulses
 %
-%   EmulSynch                   = is scanner synch pulse emulated 
-%   EmulButtons                 = is button box emulated
+%   EmulSynch                   = is scanner synch pulse emulated, -1 means not used 
+%   EmulButtons                 = is button box emulated, -1 means not used
 %
 % 	Buttons						= current state of the any button
 %   ButtonPresses               = index/indices of each button(s) pressed since last check
@@ -180,7 +180,7 @@ classdef ScannerSynchClass < handle
             % test environment
             obj.isDAQ = true;
             try 
-                D = daq.getDevices; D = D(strcmp({D.ID},'Dev1'));
+                D = daqlist; D = D(strcmp({D.ID},'Dev1'));
                 if isempty(D) || ...
                         ~D.isvalid ||...
                         ~any(strcmp({D.Vendor.ID},'ni')) ||...
@@ -189,14 +189,25 @@ classdef ScannerSynchClass < handle
                         obj.isDAQ = false; 
                 end % no NI card or not working
             catch E
-                warning('\nWARNING: %s',E.message)
+                warning(E.identifier,'\nWARNING: %s',E.message)
                 obj.isDAQ = false; % no DA Toolbox
             end
             
             % Create session
-            if ((nargin<2) || ~emulSynch || ~emulButtons) && obj.isDAQ
+            switch nargin
+                case 2
+                    obj.EmulSynch = emulSynch;
+                    obj.EmulButtons = emulButtons;
+                case 1
+                    obj.EmulSynch = emulSynch;
+                    obj.EmulButtons = false;
+                case 0
+                    obj.EmulSynch = false;
+                    obj.EmulButtons = false;
+            end
+            if (~obj.EmulSynch || ~obj.EmulButtons) && obj.isDAQ
                 warning off daq:Session:onDemandOnlyChannelsAdded
-                obj.DAQ = daq.createSession('ni');
+                obj.DAQ = daq('ni');
                 % Add channels for scanner pulse
                 obj.DAQ.addDigitalChannel('Dev1', 'port0/line0', 'InputOnly'); % manual
                 obj.DAQ.addDigitalChannel('Dev1', 'port0/line1', 'InputOnly'); % scanner
@@ -212,25 +223,13 @@ classdef ScannerSynchClass < handle
                 obj.DAQ.addDigitalChannel('Dev1', 'port1/line3', 'InputOnly');
                 obj.DAQ.addDigitalChannel('Dev1', 'port1/line4', 'InputOnly');
                 obj.DAQ.addDigitalChannel('Dev1', 'port1/line5', 'InputOnly');
-                
-                switch nargin
-                    case 2
-                        obj.EmulSynch = emulSynch;
-                        obj.EmulButtons = emulButtons;
-                    case 1
-                        obj.EmulSynch = emulSynch;
-                        obj.EmulButtons = false;
-                    case 0
-                        obj.EmulSynch = false;
-                        obj.EmulButtons = false;
-                end
             else
                 obj.isDAQ = false;
                 obj.DAQ.isvalid = true;
                 obj.DAQ.Vendor.isvalid = true;
                 obj.DAQ.Vendor.IsOperational = true;
-                obj.EmulSynch = true;
-                obj.EmulButtons = true;
+                if ~obj.EmulSynch, obj.EmulSynch = true; end
+                if ~obj.EmulButtons, obj.EmulButtons = true; end
                 
                 obj.DAQ.Channels = 1:(1 + numel(obj.buttList_LT) + numel(obj.buttList_NATA));
                 fprintf('\n');
@@ -245,12 +244,12 @@ classdef ScannerSynchClass < handle
                 return
             end
             
-            if obj.EmulSynch
-                fprintf('Emulation: Scanner synch pulse is not in use --> ');
+            if obj.EmulSynch == 1
+                fprintf('Emulation: Scanner synch pulse is emulated --> ');
                 fprintf('You may need to set TR!\n');
             end
-            if obj.EmulButtons
-                fprintf('Emulation: ButtonBox is not in use           --> ');
+            if obj.EmulButtons == 1
+                fprintf('Emulation: ButtonBox is emulated           --> ');
                 fprintf('You may need to set Keys!\n');
             end
 
@@ -280,7 +279,7 @@ classdef ScannerSynchClass < handle
                 obj.DAQ.isvalid &&...
                 obj.DAQ.Vendor.isvalid &&...
                 obj.DAQ.Vendor.IsOperational &&...
-                (~obj.EmulButtons || (obj.EmulButtons && obj.isPTB));
+                ((obj.EmulButtons == -1) || ~obj.EmulButtons || (logical(obj.EmulButtons) && obj.isPTB));
         end
         
         function ResetClock(obj)

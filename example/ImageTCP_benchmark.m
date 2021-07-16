@@ -4,7 +4,7 @@ nScan = 20;
 TR = 2;
 
 % ScannerSynch
-SSO = ScannerSynchClass(0,0);
+SSO = ScannerSynchClass(0,-1);
 SSO.SetSynchReadoutTime(0.5);
 SSO.TR = TR;
 
