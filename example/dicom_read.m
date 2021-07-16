@@ -19,13 +19,22 @@ end
 end
 
 function hdr = dicom_hdr(img_file)
-hdr = spm_dicom_headers(img_file); hdr = hdr{1};
+MinimalDicomDictionary = struct(...
+    'group',[2 24 32 32 40 40 40 40 40 41 32736],...
+    'element',[16 136 50 55 48 16 17 258 259 4112 16],...
+    'values',struct(...
+        'name',{'TransferSyntaxUID' 'SpacingBetweenSlices' 'ImagePositionPatient' 'ImageOrientationPatient' 'PixelSpacing' 'Rows' 'Columns' 'HighBit' 'PixelRepresentation' 'CSAImageHeaderInfo' 'PixelData'},...
+        'vr',{{'UI'} {'DS'} {'DS'} {'DS'} {'DS'} {'US'} {'US'} {'US'} {'US'} {'OB'} {'OW' 'OB'} },...
+        'vm',{'1' '1' '3' '6' '2' '1' '1' '1' '1' '1' '1'}...
+        )...
+    );
+hdr = spm_dicom_header(img_file,MinimalDicomDictionary,struct('abort',false, 'all_fields',false));
 CSA = hdr.CSAImageHeaderInfo;
 
-mat = cellfun(@(x) str2double(x),regexp(CSA(cellfun(@(x) contains(x,'AcquisitionMatrixText'), {CSA.name})).item(1).val,'[0-9]*[0-9]*','match'));
+mat = reshape(cellfun(@(x) str2double(x),regexp(CSA(cellfun(@(x) contains(x,'AcquisitionMatrixText'), {CSA.name})).item(1).val,'[0-9]*[0-9]*','match')),1,[]);
 nSl = str2double(CSA(cellfun(@(x) contains(x,'NumberOfImagesInMosaic'), {CSA.name})).item(1).val);
 
-hdr.Dimensions = [mat' nSl];
+hdr.Dimensions = [mat nSl];
 hdr.PixelDimensions = [hdr.PixelSpacing(:)' hdr.SpacingBetweenSlices];
 
 analyze_to_dicom = [diag([1 -1 1]) [0 (mat(2)-1) 0]'; 0 0 0 1]*[eye(4,3) [-1 -1 -1 1]'];
@@ -37,7 +46,7 @@ orient(:,3) = null(orient');
 if det(orient)<0, orient(:,3) = -orient(:,3); end
 
 dicom_to_patient = [orient*diag(vox) pos ; 0 0 0 1];
-truepos          = dicom_to_patient *[([hdr.Columns hdr.Rows]-mat')/2 0 1]';
+truepos          = dicom_to_patient *[([hdr.Columns hdr.Rows]-mat)/2 0 1]';
 dicom_to_patient = [orient*diag(vox) truepos(1:3) ; 0 0 0 1];
 patient_to_tal   = diag([-1 -1 1 1]);
 mat              = patient_to_tal*dicom_to_patient*analyze_to_dicom;
